@@ -71,10 +71,10 @@ if __name__ == "__main__":
     category = args.category
     endpoint = args.endpoint
 
-    endpoint_fixed = fix_endpoint
+    endpoint_fixed = fix_endpoint(endpoint)
     if endpoint_fixed != endpoint:
-        print_err(f"Endpoint: {endpoint}")
         endpoint = endpoint_fixed
+        print_err(f"Endpoint: {endpoint}")
     
     query = { 
         'action'        : 'query', 

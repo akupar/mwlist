@@ -38,7 +38,8 @@ class MWApiException(Exception):
 
 continue_keywords = {
     "embeddedin": "eicontinue",
-    "categorymembers" : "cmcontinue",
+    "categorymembers": "cmcontinue",
+    "pageprops": "ppcontinue",
 }
 
 
@@ -50,8 +51,12 @@ class QueryResult():
         self.query = query
         self.result = query_result_json
 
-        self.qtype = query['list']
-        self.qcontinue = continue_keywords[self.qtype]
+        if 'list' in query:
+            self.qtype = query['list']
+        elif 'prop' in query:
+            self.qtype = query['prop']
+
+        self.qcontinue = continue_keywords.get(self.qtype)
         if not self.qcontinue:
             raise Exception("Not implemented: continue " + self.qtype)
 
@@ -82,11 +87,12 @@ class QueryResult():
     def data(self):
         if 'query' not in self.result:
             return None
-        if self.qtype not in self.result['query']:
-            return None
-        
-        return self.result['query'][self.qtype]
 
+        if self.qtype in self.result['query']:
+            return self.result['query'][self.qtype]
+        elif 'pages' in self.result['query']:
+            return self.result['query']['pages']
+        
 
 class QueryHandler(object):
     """
@@ -100,7 +106,12 @@ class QueryHandler(object):
         """
         self.api = api
         self.query = query
-        self.qtype = query['list']
+        if 'list' in query:
+            self.qtype = query['list']
+        elif 'prop' in query:
+            self.qtype = query['prop']
+        else:
+            raise Exception("Not implemented")
         self.qcontinue = qcontinue or continue_keyword[self.qtype]
         self._continues = False
 
@@ -130,6 +141,7 @@ class QueryHandler(object):
             if qr.has_warnings():
                 self.api.print_warnings(qr)
 
+            print("YIELDING:", json.dumps(qr.data))
             yield qr.data
 
             if not qr.continues():
@@ -182,18 +194,12 @@ class MWApi(object):
         return QueryHandler(self, query, cont)
 
 
-    def general_query2(self, query, captcha_cb):
+    def general_query(self, query):
+        qrjson = self.wiki.call(query)
+        qr = QueryResult(query, qrjson)
 
-        if 'token' not in query or query['token'] == None:
-            query['token'] = self.csrftoken
-
-        qr = self.wiki.call(query)
-        logging.debug("edit_page: edit: query-return: %s", qr)
-
-        print(qr)
-
-        if 'error' in qr: 
-            raise MWApiException(self.get_error(qr))
+        if qr.has_error(): 
+            raise MWApiException(qr.get_error())
 
         return qr
 
