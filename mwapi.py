@@ -40,6 +40,7 @@ continue_keywords = {
     "embeddedin": "eicontinue",
     "categorymembers": "cmcontinue",
     "pageprops": "ppcontinue",
+    "usercontribs": "uccontinue",
 }
 
 
@@ -139,7 +140,7 @@ class QueryHandler(object):
                 raise MWApiException(qr.get_error())
         
             if qr.has_warnings():
-                self.api.print_warnings(qr)
+                self.api.print_warnings(qr.result)
 
             print("YIELDING:", json.dumps(qr.data))
             yield qr.data
@@ -229,3 +230,7 @@ class MWApi(object):
 
         
 
+    def print_warnings(self, qr):
+        for warning in qr['warnings']:
+            print_err(warning)
+            

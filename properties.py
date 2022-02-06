@@ -38,7 +38,7 @@ def print_err(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-def get(items, output, api):
+def get(items, output, api, pageids):
     string = "|".join(items),
     if pageids:
         query['pageids'] = string[0]
@@ -53,12 +53,12 @@ def get(items, output, api):
         for key in partial_dict.keys():
             pages[key] = partial_dict[key]
         if query_handler.continues():
-            sys.stdout.write('.')
+            sys.stderr.write('.')
             time.sleep(5)
             continued = True            
 
     if continued:
-        sys.stdout.write('\n')
+        sys.stderr.write('\n')
         
     for pageid in pages.keys():
         if pageid == "-1":
@@ -138,7 +138,7 @@ if __name__ == "__main__":
     api = mwapi.MWApi(endpoint)        
     for items in input_chunks:
 
-        get(items, output, api)
+        get(items, output, api, pageids)
         
          
 

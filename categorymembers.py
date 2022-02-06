@@ -30,14 +30,16 @@ def get(category, output, api):
     query_handler = api.general_list_query(query, "cmcontinue")
 
     page_list = []
+    continued = False
     for partial_list in query_handler.next():
         page_list = page_list + partial_list
         if query_handler.continues():
-            sys.stdout.write('.')
+            sys.stderr.write('.')
             time.sleep(5)
+            continued = True
 
-    if partial_list:
-        sys.stdout.write('\n')
+    if continued:
+        sys.stderr.write('\n')
         
     for line in page_list:
         output.write(line['title'])
