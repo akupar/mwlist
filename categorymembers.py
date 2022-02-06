@@ -3,47 +3,61 @@
 
 import sys
 import time
-import mwapi
 import argparse
 
-from pprint import pprint
+import mwapi
+
+def print_err(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+def fix_endpoint(endpoint):
+    if endpoint.startswith("http://"):
+        endpoint = endpoint.replace("http://", "https://")
+        
+    if not endpoint.startswith("https://"):
+        endpoint = "https://" + endpoint
+    
+    if not endpoint.endswith("/w/api.php"):
+        endpoint = endpoint + "/w/api.php"
+
+    return endpoint
 
 
-
-
-def get(category, output_file, api):
+def get(category, output, api):
     query['cmtitle'] = 'Category:' + category
-    print("Fetching:", query['cmtitle'])
+    print_err("Fetching:", query['cmtitle'])
 
     query_handler = api.general_list_query(query, "cmcontinue")
 
     page_list = []
     for partial_list in query_handler.next():
-        sys.stdout.write('.')
         page_list = page_list + partial_list
         if query_handler.continues():
+            sys.stdout.write('.')
             time.sleep(5)
+
+    if partial_list:
+        sys.stdout.write('\n')
         
     for line in page_list:
-        output_file.write(line['title'])
-        output_file.write(';')
-        output_file.write(category)                
-        output_file.write('\n')
+        output.write(line['title'])
+        output.write(';')
+        output.write(category)                
+        output.write('\n')
 
-    print(f"Wrote: {len(page_list)}")
+    print_err(f"Wrote: {len(page_list)}")
 
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Lists category members of a mediawiki wiki')
     
     parser.add_argument('--output', '-o', type=str,
-                        help='Output file name',
-                        required=True)
+                        help='Output file name')
     
     parser.add_argument('--category', '-c', type=str,
                         help='Category to fetch')
     
-    parser.add_argument('-a', '--api-url', type=str,
+    parser.add_argument('-e', '--endpoint', type=str,
                         help='API url eg. en.wiktionary.org/w/api.php',
                         required=True)
     
@@ -55,13 +69,12 @@ if __name__ == "__main__":
     
     filename = args.output
     category = args.category
-    apiurl = args.api_url
-    
-    if not apiurl.startswith("http"):
-        apiurl = "https://" + apiurl
-    
-    if not apiurl.endswith("/w/api.php"):
-        apiurl = apiurl + "/w/api.php"
+    endpoint = args.endpoint
+
+    endpoint_fixed = fix_endpoint
+    if endpoint_fixed != endpoint:
+        print_err(f"Endpoint: {endpoint}")
+        endpoint = endpoint_fixed
     
     query = { 
         'action'        : 'query', 
@@ -74,23 +87,27 @@ if __name__ == "__main__":
             'cmcontinue'    : None,
     }
 
-    api = mwapi.MWApi(apiurl)
+    api = mwapi.MWApi(endpoint)
 
-    if category:
-        with open(filename, 'a') as output_file:        
-            get(category, output_file, api)
+    if filename or filename == '-':
+        output = sys.stdout
     else:
-        with open(filename, 'a') as output_file:
-            while True:
-                line = sys.stdin.readline()
-                if not line:
-                    break
+        output = open(filename, 'a') 
+    
+    if category:
+        get(category, output, api)
+    else:
+        print_err("Enter category names:")
+        while True:
+            line = sys.stdin.readline()
+            if not line:
+                break
 
-                line = line.strip()
-                if line == '':
-                    break
+            line = line.strip()
+            if line == '':
+                break
             
-                get(line, output_file, api)
+            get(line, output, api)
 
             
 
