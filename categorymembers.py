@@ -15,16 +15,10 @@ def get(category, the_file, api):
     query['cmtitle'] = 'Category:' + category
     print("Fetching:", query['cmtitle'])
 
-
-    
-    has_more = True
-    
-    query_ = api.general_query(query, "cmcontinue")
+    query_ = api.general_list_query(query, "cmcontinue")
 
     lst = query_.list
 
-    print("list 1: ", query_.list)
-    
     while query_.continues():
         query['cmcontinue'] = query_.ticket
         query_ = api.general_query(query, "cmcontinue")
