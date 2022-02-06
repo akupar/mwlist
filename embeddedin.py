@@ -3,95 +3,113 @@
 
 import sys
 import time
-import mwapi
 import argparse
-from pprint import pprint
 
+import mwapi
 
-parser = argparse.ArgumentParser(description='Optional app description')
+def print_err(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
 
-parser.add_argument('-o', '--output', type=str,
-                    help='Tulostettavan tiedoston nimi.')
-
-parser.add_argument('-t', '--template', type=str,
-                    help='Haettava malline')
-
-parser.add_argument('-a', '--api-url', type=str,
-                    help='APIn URL')
-
-args = parser.parse_args()
-
-filename = args.output
-template = args.template
-apiurl = args.api_url or "https://fi.wiktionary.org/w/api.php"
-
-if not template.startswith("Template:"):
-    template = "Template:" + template
-    
-
-if not filename:
-    print("Tiedosto puuttuu")
-    exit(1)
-
-if not template:
-    print(f"Puuttuu parametri template")
-    exit(1)
-
-
-query = { 
-    'action'        : 'query',
-    'format'        : 'json',
-    'list'          : 'embeddedin', 
-    'eititle'       : None,
-    #'einamespace'   : "0",
-    #'eidir'         : dir                  and dir, 
-    'eilimit'       : 500,
-    #'eiprop'       : "|",
-    'eicontinue'    : None,
-    #'rawcontinue' : '',
-}
-
-    
-
-def get(template_name, the_file, api):
-    query['eititle'] = template_name
-    print("haetaan:", query['eititle'])
-
-
-    
-    has_more = True
-    
-    query_ = api.general_query(query, "eicontinue")
-
-    lst = query_.list
-
-    print("list 1: ", query_.list)
-    
-    while query_.continues():
-        query['eicontinue'] = query_.ticket
-        query_ = api.general_query(query, "eicontinue")
-        print("list n: ", query_.list)
-        lst = lst + query_.list
+def fix_endpoint(endpoint):
+    if endpoint.startswith("http://"):
+        endpoint = endpoint.replace("http://", "https://")
         
-    for line in lst:
-        the_file.write(line['title'])
-        the_file.write(';')
-        the_file.write(template_name)                
-        the_file.write('\n')
+    if not endpoint.startswith("https://"):
+        endpoint = "https://" + endpoint
+    
+    if not endpoint.endswith("/w/api.php"):
+        endpoint = endpoint + "/w/api.php"
 
-    print(f"Kirjoitetttiin: {len(lst)}")
+    return endpoint
+
+
+def get(template, output, api):
+    query['eititle'] = 'Template:' + template
+    print_err("Fetching:", query['eititle'])
+
+    query_handler = api.general_list_query(query, "eicontinue")
+
+    page_list = []
+    for partial_list in query_handler.next():
+        page_list = page_list + partial_list
+        if query_handler.continues():
+            sys.stdout.write('.')
+            time.sleep(5)
+
+    if partial_list:
+        sys.stdout.write('\n')
+        
+    for line in page_list:
+        output.write(line['title'])
+        output.write(';')
+        output.write(template)                
+        output.write('\n')
+
+    print_err(f"Wrote: {len(page_list)}")
+
     
 if __name__ == "__main__":
-    api = mwapi.MWApi(apiurl)
-
-
-    if not filename:
-        print(f'Käyttö: {sys.argv[0]} --output <tiedosto>')
+    parser = argparse.ArgumentParser(description='Lists pages a template is embedded in in a mediawiki wiki')
+    
+    parser.add_argument('--output', '-o', type=str,
+                        help='Output file name')
+    
+    parser.add_argument('--template', '-t', type=str,
+                        help='Template')
+    
+    parser.add_argument('-e', '--endpoint', type=str,
+                        help='API url eg. en.wiktionary.org/w/api.php',
+                        required=True)
+    
+    try:
+        args = parser.parse_args()
+    except:
         exit(1)
-
-    with open(filename, 'a') as the_file:
-
-        get(template, the_file, api)
-
-
         
+    
+    filename = args.output
+    template = args.template
+    endpoint = args.endpoint
+
+    endpoint_fixed = fix_endpoint(endpoint)
+    if endpoint_fixed != endpoint:
+        print_err(f"Endpoint: {endpoint}")
+        endpoint = endpoint_fixed
+
+    query = { 
+        'action'        : 'query',
+        'format'        : 'json',
+        'list'          : 'embeddedin', 
+        'eititle'       : None,
+        #'einamespace'   : "0",
+        #'eidir'         : dir                  and dir, 
+        'eilimit'       : 500,
+        #'eiprop'       : "|",
+        'eicontinue'    : None,
+    }
+        
+
+    api = mwapi.MWApi(endpoint)
+
+    if filename or filename == '-':
+        output = sys.stdout
+    else:
+        output = open(filename, 'a') 
+    
+    if template:
+        get(template, output, api)
+    else:
+        print_err("Enter template names:")
+        while True:
+            line = sys.stdin.readline()
+            if not line:
+                break
+
+            line = line.strip()
+            if line == '':
+                break
+            
+            get(line, output, api)
+
+            
+
