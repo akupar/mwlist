@@ -1,0 +1,6 @@
+*~
+#*#
+*.pyc
+
+login/*
+__pycache__

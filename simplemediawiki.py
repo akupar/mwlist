@@ -1,0 +1,1 @@
+../hunsbot/simplemediawiki.py
