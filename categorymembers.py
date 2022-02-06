@@ -15,24 +15,21 @@ def get(category, the_file, api):
     query['cmtitle'] = 'Category:' + category
     print("Fetching:", query['cmtitle'])
 
-    query_ = api.general_list_query(query, "cmcontinue")
+    query_handler = api.general_list_query(query, "cmcontinue")
 
-    lst = query_.list
-
-    while query_.continues():
-        query['cmcontinue'] = query_.ticket
-        query_ = api.general_query(query, "cmcontinue")
-        lst = lst + query_.list
-        if query_.continues():
+    page_list = []
+    for partial_list in query_handler.next():
+        page_list = page_list + partial_list
+        if query_handler.continues():
             time.sleep(5)
         
-    for line in lst:
+    for line in page_list:
         the_file.write(line['title'])
         the_file.write(';')
         the_file.write(category)                
         the_file.write('\n')
 
-    print(f"Wrote: {len(lst)}")
+    print(f"Wrote: {len(page_list)}")
 
     
 if __name__ == "__main__":
@@ -86,7 +83,7 @@ if __name__ == "__main__":
         'cmtitle'       : 'Category:' + category,
         'cmnamespace'   : "*",
         #'cmdir'         : dir                  and dir, 
-            'cmlimit'       : 500,
+            'cmlimit'       : 30,
         #'cmprop'       : "|",
             'cmcontinue'    : None,
         #'rawcontinue' : '',

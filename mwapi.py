@@ -41,19 +41,68 @@ continue_keywords = {
     "categorymembers" : "cmcontinue",
 }
 
+
+            
+        
+
+class QueryResult():
+    def __init__(self, query, query_result_json):
+        self.query = query
+        self.result = query_result_json
+
+        self.qtype = query['list']
+        self.qcontinue = continue_keywords[self.qtype]
+        if not self.qcontinue:
+            raise Exception("Not implemented: continue " + self.qtype)
+
+    def has_error(self):
+        return ('error' in self.result)
+
+    def get_error(self):
+        if 'error' in self.result:
+            return self.result['error']['code'] + ": " + self.result['error']['info']
+        else:
+            return None
+
+    def has_warnings(self):
+        return ('warnings' in self.result)
+
+    def continues(self):
+        return self.get_continue_id()
+        
+    def get_continue_id(self):
+        if 'query-continue' in self.result:
+            return self.result['query-continue'][self.qtype][self.qcontinue]
+        if 'continue' in self.result:
+            return self.result['continue'][self.qcontinue]
+        
+        return None
+
+    @property
+    def data(self):
+        if 'query' not in self.result:
+            return None
+        if self.qtype not in self.result['query']:
+            return None
+        
+        return self.result['query'][self.qtype]
+
+
 class QueryHandler(object):
     """
     MWApin palauttama lista, jonka lataamista voi jatkaa.
     """
-    def __init__(self, type_, list_, ticket=None):
+    def __init__(self, api, query, qcontinue = None):
         """
         @p type_    queryn tyyppi
         @p list_    apin palauttama list
         @p ticket   queryn jatkamiseen käytetty koodi
         """
-        self.type = type_
-        self.list = list_
-        self.ticket = ticket
+        self.api = api
+        self.query = query
+        self.qtype = query['list']
+        self.qcontinue = qcontinue or continue_keyword[self.qtype]
+        self._continues = False
 
     def __str__(self):
         return self.type + str(self.list)
@@ -64,38 +113,40 @@ class QueryHandler(object):
     def __len__(self):
         return len(self.list)
 
-    def next(self):
-        return self.list.next()
-
-    def __iter__(self):
-        return self.list.__iter__()
-
     def continues(self):
-        return self.ticket != None
+        return self._continues
 
-    def merge(self, another):
-        if another.type == self.type:
-            self.list = self.list + another.list
-            self.ticket = another.ticket
-        else:
-            raise Exception("QueryHandler:merge: listat eri tyyppiä")
-
-
+    def next(self):
+        api = self.api
+        qtype = self.qtype
+        query = self.query
+        qcontinue = self.qcontinue
         
+        while True:
+            qr = api.list_query(query)
+            if qr.has_error():
+                raise MWApiException(qr.get_error())
+        
+            if qr.has_warnings():
+                self.api.print_warnings(qr)
+
+            yield qr.data
+
+            if not qr.continues():
+                self._continues = False                
+                break
+            
+            query['cmcontinue'] = qr.get_continue_id()
+        self._continues = True
+            
+        return None
+
+    
 class MWApi(object):
     def __init__(self, apiurl = None):
         self.apiurl = apiurl
-        ua = mw.build_user_agent("mediawiki-list", "0.10", "github.com/akupar/mediawiki-list")
+        ua = mw.build_user_agent("mediawiki-list", "0.10", "https://github.com/akupar/mwlist")
         self.wiki = mw.MediaWiki(apiurl, user_agent=ua)
-
-    def has_error(self, result):
-        return ('error' in result)
-    
-    def get_error(self, result):
-        if 'error' in result:
-            return result['error']['code'] + ": " + result['error']['info']
-        else:
-            return None
 
     def login(self, name, passwd):
         if self.wiki.login(name, passwd):
@@ -109,51 +160,26 @@ class MWApi(object):
         r = self.wiki.namespaces()
         logging.debug("get_namespaces: query-return: %s", r)
 
-    def list_query(self, query, qtype, qcontinue):
+    def list_query(self, query):
         """
-        @p query           varsinainen pyyntö
-        @p qtype           esim. "embeddedin", "categorymembers"
-        @p qcontinue       esim. "eicontinue", "cmcontinue"
-        @return (QueryHandler)  sisältää apin vastauksen alkaen `qtypen` jälkeläisistä
+        @return (QueryResult)  
         """
 
-        if not qcontinue:
-            qcontinue = continue_keywords[qtype]
-
-        if not qcontinue:
-            raise Exception("Missing parameter qcontinue")
-
-        qr = self.wiki.call(remove_empty(query))
+        qrjson = self.wiki.call(remove_empty(query))
+        qr = QueryResult(query, qrjson)
         
-        if has_errors(qr):
-            raise MWApiException(get_error(qr))
-        
-        if has_warnings(qr):
-            self.print_warnings(qr)
-
-        cont = None
-        if 'query-continue' in qr:
-            cont = qr['query-continue'][qtype][qcontinue]
-
-        if 'continue' in qr:
-            cont = qr['continue'][qcontinue]
-
-        if 'query' in qr and qtype in qr['query']:
-            page_list = qr['query'][qtype]
-        else:
-            page_list = None
-
-
-        return QueryHandler(qtype, page_list, cont)
+        return qr
     
 
 
     def general_list_query(self, query, cont):
         """
+        Makes a list query that generates results.
 
+        @return (QueryHandler)  
         """
 
-        return self.list_query(query, query['list'], cont)
+        return QueryHandler(self, query, cont)
 
 
     def general_query2(self, query, captcha_cb):
