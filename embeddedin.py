@@ -91,7 +91,7 @@ if __name__ == "__main__":
 
     api = mwapi.MWApi(endpoint)
 
-    if filename or filename == '-':
+    if not filename or filename == '-':
         output = sys.stdout
     else:
         output = open(filename, 'a') 
