@@ -149,8 +149,8 @@ class QueryHandler(object):
                 self._continues = False                
                 break
             
-            query['cmcontinue'] = qr.get_continue_id()
-        self._continues = True
+            query[qcontinue] = qr.get_continue_id()
+            self._continues = True
             
         return None
 
